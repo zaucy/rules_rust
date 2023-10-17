@@ -1085,13 +1085,9 @@ def rustc_compile_action(
         attr,
         toolchain,
         rust_flags = [],
-        crate_type = None,
-        crate_info = None,
         output_hash = None,
         force_all_deps_direct = False,
-        # TODO: Remove create_crate_info_callback and skip_expanding_rustc_env attributes
-        # after all CrateInfo structs are constructed in rustc_compile_action
-        create_crate_info_callback = None,
+        crate_info_dict = None,
         skip_expanding_rustc_env = False):
     """Create and run a rustc compile action based on the current rule's attributes
 
@@ -1099,13 +1095,11 @@ def rustc_compile_action(
         ctx (ctx): The rule's context object
         attr (struct): Attributes to use for the rust compile action
         toolchain (rust_toolchain): The current `rust_toolchain`
-        crate_type: TODO
-        crate_info (CrateInfo): The CrateInfo provider for the current target.
         output_hash (str, optional): The hashed path of the crate root. Defaults to None.
         rust_flags (list, optional): Additional flags to pass to rustc. Defaults to [].
         force_all_deps_direct (bool, optional): Whether to pass the transitive rlibs with --extern
             to the commandline as opposed to -L.
-        create_crate_info_callback: A callback to construct a mutable dict for constructor CrateInfo
+        crate_info_dict: A mutable dict used to create CrateInfo provider
         skip_expanding_rustc_env (bool, optional): Whether to expand CrateInfo.rustc_env
 
     Returns:
@@ -1114,19 +1108,11 @@ def rustc_compile_action(
             - (DepInfo): The transitive dependencies of this crate.
             - (DefaultInfo): The output file for this crate, and its runfiles.
     """
-    # TODO: Remove create_crate_info_callback after all rustc_compile_action callers migrate to
-    # removing CrateInfo construction before `rust_compile_action
+    crate_info = rust_common.create_crate_info(**crate_info_dict)
 
-    crate_info_dict = None
-    if create_crate_info_callback != None:
-        if ctx == None or toolchain == None or crate_type == None or crate_info != None:
-            fail("FAIL", ctx, toolchain, crate_type)
-        crate_info_dict = create_crate_info_callback(ctx, toolchain, crate_type)
-
-    if crate_info_dict != None:
-        crate_info = rust_common.create_crate_info(**crate_info_dict)
-
-    build_metadata = getattr(crate_info, "metadata", None)
+    build_metadata = None
+    if "metadata" in crate_info_dict:
+        build_metadata = crate_info_dict["metadata"]
 
     cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
 
@@ -1144,9 +1130,9 @@ def rustc_compile_action(
             experimental_use_cc_common_link = toolchain._experimental_use_cc_common_link
 
     dep_info, build_info, linkstamps = collect_deps(
-        deps = crate_info.deps,
-        proc_macro_deps = crate_info.proc_macro_deps,
-        aliases = crate_info.aliases,
+        deps = crate_info_dict["deps"],
+        proc_macro_deps = crate_info_dict["proc_macro_deps"],
+        aliases = crate_info_dict["aliases"],
         are_linkstamps_supported = _are_linkstamps_supported(
             feature_configuration = feature_configuration,
             has_grep_includes = hasattr(ctx.attr, "_use_grep_includes"),

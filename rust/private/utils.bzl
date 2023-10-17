@@ -727,7 +727,7 @@ def _shortest_src_with_basename(srcs, basename):
                 shortest = f
     return shortest
 
-def _determine_lib_name(name, crate_type, toolchain, lib_hash = None):
+def determine_lib_name(name, crate_type, toolchain, lib_hash = None):
     """See https://github.com/bazelbuild/rules_rust/issues/405
 
     Args:
@@ -849,68 +849,3 @@ def _symlink_for_non_generated_source(ctx, src_file, package_root):
         return src_symlink
     else:
         return src_file
-
-def create_crate_info_dict(ctx, toolchain, crate_type):
-    """Creates a mutable dict() representing CrateInfo provider
-
-    create_crate_info_dict is a *temporary* solution until create_crate_info is completely moved into
-    rustc_compile_action function.
-
-    The function is currently used as a callback to support constructing CrateInfo in rustc_compile_action
-    to ensure `CrateInfo.rustc_env` is fully loaded with all the env vars passed to rustc.
-
-    Args:
-        ctx (struct): The current rule's context
-        toolchain (toolchain): The rust toolchain
-        crate_type (String): one of lib|rlib|dylib|staticlib|cdylib|proc-macro
-
-    Returns:
-        File: The created symlink if a non-generated file, or the file itself.
-    """
-    crate_name = compute_crate_name(ctx.workspace_name, ctx.label, toolchain, ctx.attr.crate_name)
-    crate_root = getattr(ctx.file, "crate_root", None)
-    if not crate_root:
-        crate_root = crate_root_src(ctx.attr.name, ctx.files.srcs, crate_type)
-    srcs, crate_root = transform_sources(ctx, ctx.files.srcs, crate_root)
-
-    if crate_type in ["cdylib", "staticlib"]:
-        output_hash = None
-    else:
-        output_hash = determine_output_hash(crate_root, ctx.label)
-
-    deps = transform_deps(ctx.attr.deps)
-    proc_macro_deps = transform_deps(ctx.attr.proc_macro_deps + get_import_macro_deps(ctx))
-    rust_lib_name = _determine_lib_name(
-        crate_name,
-        crate_type,
-        toolchain,
-        output_hash,
-    )
-    rust_lib = ctx.actions.declare_file(rust_lib_name)
-    rust_metadata = None
-    if can_build_metadata(toolchain, ctx, crate_type) and not ctx.attr.disable_pipelining:
-        rust_metadata = ctx.actions.declare_file(
-            paths.replace_extension(rust_lib_name, ".rmeta"),
-            sibling = rust_lib,
-        )
-
-    return dict(
-        name = crate_name,
-        type = crate_type,
-        root = crate_root,
-        srcs = depset(srcs),
-        deps = depset(deps),
-        proc_macro_deps = depset(proc_macro_deps),
-        aliases = ctx.attr.aliases,
-        output = rust_lib,
-        metadata = rust_metadata,
-        edition = get_edition(ctx.attr, toolchain, ctx.label),
-        rustc_env = ctx.attr.rustc_env,
-        rustc_env_files = ctx.files.rustc_env_files,
-        is_test = False,
-        data = depset(ctx.files.data),
-        compile_data = depset(ctx.files.compile_data),
-        compile_data_targets = depset(ctx.attr.compile_data),
-        owner = ctx.label,
-        _rustc_env_attr = ctx.attr.rustc_env,
-    )
