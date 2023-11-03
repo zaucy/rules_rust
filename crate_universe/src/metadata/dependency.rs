@@ -1,7 +1,9 @@
 //! Gathering dependencies is the largest part of annotating.
 
 use anyhow::{bail, Result};
-use cargo_metadata::{Metadata as CargoMetadata, Node, NodeDep, Package, PackageId};
+use cargo_metadata::{
+    DependencyKind, Metadata as CargoMetadata, Node, NodeDep, Package, PackageId,
+};
 use cargo_platform::Platform;
 use serde::{Deserialize, Serialize};
 
@@ -47,8 +49,8 @@ impl DependencySet {
                 .partition(|dep| is_dev_dependency(dep));
 
             (
-                collect_deps_selectable(node, dev, metadata),
-                collect_deps_selectable(node, normal, metadata),
+                collect_deps_selectable(node, dev, metadata, DependencyKind::Normal),
+                collect_deps_selectable(node, normal, metadata, DependencyKind::Normal),
             )
         };
 
@@ -63,8 +65,8 @@ impl DependencySet {
                 .partition(|dep| is_dev_dependency(dep));
 
             (
-                collect_deps_selectable(node, dev, metadata),
-                collect_deps_selectable(node, normal, metadata),
+                collect_deps_selectable(node, dev, metadata, DependencyKind::Development),
+                collect_deps_selectable(node, normal, metadata, DependencyKind::Development),
             )
         };
 
@@ -81,8 +83,8 @@ impl DependencySet {
                 .partition(|dep| is_proc_macro_package(&metadata[&dep.pkg]));
 
             (
-                collect_deps_selectable(node, proc_macro, metadata),
-                collect_deps_selectable(node, normal, metadata),
+                collect_deps_selectable(node, proc_macro, metadata, DependencyKind::Build),
+                collect_deps_selectable(node, normal, metadata, DependencyKind::Build),
             )
         };
 
@@ -126,6 +128,7 @@ fn is_optional_crate_enabled(
     dep: &NodeDep,
     target: Option<&Platform>,
     metadata: &CargoMetadata,
+    kind: DependencyKind,
 ) -> bool {
     let pkg = &metadata[&parent.id];
 
@@ -141,6 +144,7 @@ fn is_optional_crate_enabled(
     if let Some(toml_dep) = pkg
         .dependencies
         .iter()
+        .filter(|&d| d.kind == kind)
         .filter(|&d| d.target.as_ref() == target)
         .filter(|&d| d.optional)
         .find(|&d| sanitize_module_name(&d.name) == dep.name)
@@ -155,6 +159,7 @@ fn collect_deps_selectable(
     node: &Node,
     deps: Vec<&NodeDep>,
     metadata: &cargo_metadata::Metadata,
+    kind: DependencyKind,
 ) -> SelectList<Dependency> {
     let mut selectable = SelectList::default();
 
@@ -165,7 +170,7 @@ fn collect_deps_selectable(
         let alias = get_target_alias(&dep.name, dep_pkg);
 
         for kind_info in &dep.dep_kinds {
-            if is_optional_crate_enabled(node, dep, kind_info.target.as_ref(), metadata) {
+            if is_optional_crate_enabled(node, dep, kind_info.target.as_ref(), metadata, kind) {
                 selectable.insert(
                     Dependency {
                         package_id: dep.pkg.clone(),
@@ -683,5 +688,25 @@ mod test {
             .get_iter(Some(&"cfg(target_os = \"macos\")".to_string()))
             .expect("Iterating over known keys should never panic")
             .any(|dep| { dep.target_name == "mio" }));
+    }
+
+    #[test]
+    fn optional_deps_disabled_build_dep_enabled() {
+        let metadata = metadata::optional_deps_disabled_build_dep_enabled();
+
+        let node = find_metadata_node("gherkin", &metadata);
+        let dependencies = DependencySet::new_for_node(node, &metadata);
+
+        assert!(!dependencies
+            .normal_deps
+            .get_iter(None)
+            .expect("Iterating over known keys should never panic")
+            .any(|dep| dep.target_name == "serde"));
+
+        assert!(dependencies
+            .build_deps
+            .get_iter(None)
+            .expect("Iterating over known keys should never panic")
+            .any(|dep| dep.target_name == "serde"));
     }
 }
