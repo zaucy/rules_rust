@@ -147,9 +147,9 @@ fn is_optional_crate_enabled(
         .filter(|&d| d.kind == kind)
         .filter(|&d| d.target.as_ref() == target)
         .filter(|&d| d.optional)
-        .find(|&d| sanitize_module_name(&d.name) == dep.name)
+        .find(|&d| sanitize_module_name(d.rename.as_ref().unwrap_or(&d.name)) == dep.name)
     {
-        enabled_deps.any(|d| d == toml_dep.name.as_str())
+        enabled_deps.any(|d| d == toml_dep.rename.as_ref().unwrap_or(&toml_dep.name))
     } else {
         true
     }
@@ -648,6 +648,19 @@ mod test {
     }
 
     #[test]
+    fn renamed_optional_deps_disabled() {
+        let metadata = metadata::renamed_optional_deps_disabled();
+
+        let serde_with = find_metadata_node("serde_with", &metadata);
+        let serde_with_depset = DependencySet::new_for_node(serde_with, &metadata);
+        assert!(!serde_with_depset
+            .normal_deps
+            .get_iter(None)
+            .expect("Iterating over known keys should never panic")
+            .any(|dep| { dep.target_name == "indexmap" }));
+    }
+
+    #[test]
     fn optional_deps_enabled() {
         let metadata = metadata::optional_deps_enabled();
 
@@ -708,5 +721,22 @@ mod test {
             .get_iter(None)
             .expect("Iterating over known keys should never panic")
             .any(|dep| dep.target_name == "serde"));
+    }
+
+    #[test]
+    fn renamed_optional_deps_enabled() {
+        let metadata = metadata::renamed_optional_deps_enabled();
+
+        let p256 = find_metadata_node("p256", &metadata);
+        let p256_depset = DependencySet::new_for_node(p256, &metadata);
+        assert_eq!(
+            p256_depset
+                .normal_deps
+                .get_iter(None)
+                .expect("Iterating over known keys should never panic")
+                .filter(|dep| { dep.target_name == "ecdsa" })
+                .count(),
+            1
+        );
     }
 }
