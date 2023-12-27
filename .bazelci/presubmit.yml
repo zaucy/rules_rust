@@ -624,6 +624,18 @@ tasks:
       - "//:nix_cross_compiling"
     test_targets:
       - "//..."
+  ubuntu2004_bzlmod_bcr:
+    name: bzlmod BCR presubmit
+    platform: ubuntu2004
+    working_directory: bzlmod/hello_world
+    build_targets:
+      - "//..."
+  macos_bzlmod_bcr:
+    name: bzlmod BCR presubmit
+    platform: macos
+    working_directory: bzlmod/hello_world
+    build_targets:
+      - "//..."
 
 buildifier:
   version: latest
