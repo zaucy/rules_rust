@@ -310,18 +310,19 @@ def collect_deps(
                 transitive_link_search_paths.append(dep_info.link_search_path_files)
 
             transitive_build_infos.append(dep_info.transitive_build_infos)
+        elif cc_info or dep_build_info:
+            if cc_info:
+                # This dependency is a cc_library
+                transitive_noncrates.append(cc_info.linking_context.linker_inputs)
 
-        elif cc_info:
-            # This dependency is a cc_library
-            transitive_noncrates.append(cc_info.linking_context.linker_inputs)
-        elif dep_build_info:
-            if build_info:
-                fail("Several deps are providing build information, " +
-                     "only one is allowed in the dependencies")
-            build_info = dep_build_info
-            transitive_build_infos.append(depset([build_info]))
-            if build_info.link_search_paths:
-                transitive_link_search_paths.append(depset([build_info.link_search_paths]))
+            if dep_build_info:
+                if build_info:
+                    fail("Several deps are providing build information, " +
+                         "only one is allowed in the dependencies")
+                build_info = dep_build_info
+                transitive_build_infos.append(depset([build_info]))
+                if build_info.link_search_paths:
+                    transitive_link_search_paths.append(depset([build_info.link_search_paths]))
         else:
             fail("rust targets can only depend on rust_library, rust_*_library or cc_library " +
                  "targets.")
@@ -776,7 +777,6 @@ def collect_inputs(
     if build_env_file:
         build_env_files = [f for f in build_env_files] + [build_env_file]
     compile_inputs = depset(build_env_files, transitive = [compile_inputs])
-
     return compile_inputs, out_dir, build_env_files, build_flags_files, linkstamp_outs, ambiguous_libs
 
 def construct_arguments(
@@ -1672,7 +1672,7 @@ def _create_extra_input_args(build_info, dep_info):
             - (depset[File]): A list of all build info `OUT_DIR` File objects
             - (str): The `OUT_DIR` of the current build info
             - (File): An optional generated environment file from a `cargo_build_script` target
-            - (depset[File]): All direct and transitive build flag files from the current build info.
+            - (depset[File]): All direct and transitive build flag files from the current build info to be passed to rustc.
     """
     input_files = []
     input_depsets = []
@@ -1690,9 +1690,10 @@ def _create_extra_input_args(build_info, dep_info):
         build_env_file = build_info.rustc_env
         if build_info.flags:
             build_flags_files.append(build_info.flags)
-        if build_info.link_flags:
-            build_flags_files.append(build_info.link_flags)
-            input_files.append(build_info.link_flags)
+        if build_info.linker_flags:
+            build_flags_files.append(build_info.linker_flags)
+            input_files.append(build_info.linker_flags)
+
         input_depsets.append(build_info.compile_data)
 
     return (
