@@ -38,6 +38,7 @@ load(
     "make_static_lib_symlink",
     "relativize",
 )
+load(":utils.bzl", "is_std_dylib")
 
 BuildInfo = _BuildInfo
 
@@ -1035,6 +1036,9 @@ def construct_arguments(
         # https://doc.rust-lang.org/rustc/instrument-coverage.html
         rustc_flags.add("--codegen=instrument-coverage")
 
+    if toolchain._experimental_link_std_dylib:
+        rustc_flags.add("--codegen=prefer-dynamic")
+
     # Make bin crate data deps available to tests.
     for data in getattr(attr, "data", []):
         if rust_common.crate_info in data:
@@ -1724,6 +1728,16 @@ def _compute_rpaths(toolchain, output_dir, dep_info, use_pic):
         for lib in linker_input.libraries
         if _is_dylib(lib)
     ]
+
+    # Include std dylib if dylib linkage is enabled
+    if toolchain._experimental_link_std_dylib:
+        # TODO: Make toolchain.rust_std to only include libstd.so
+        # When dylib linkage is enabled, toolchain.rust_std should only need to
+        # include libstd.so. Hence, no filtering needed.
+        for file in toolchain.rust_std.to_list():
+            if is_std_dylib(file):
+                dylibs.append(file)
+
     if not dylibs:
         return depset([])
 
