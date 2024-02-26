@@ -450,7 +450,7 @@ impl CrateContext {
             }
         }
 
-        let license_file = package.license_file.as_ref().map(|path| path.to_string());
+        let license_file = Self::locate_license_file(package);
 
         let package_url: Option<String> = match package.repository {
             Some(..) => package.repository.clone(),
@@ -648,6 +648,33 @@ impl CrateContext {
         }
 
         self
+    }
+
+    fn locate_license_file(package: &Package) -> Option<String> {
+        if let Some(license_file_path) = &package.license_file {
+            return Some(license_file_path.to_string());
+        }
+        let package_root = package
+            .manifest_path
+            .as_std_path()
+            .parent()
+            .expect("Every manifest should have a parent directory");
+        if package_root.exists() {
+            let mut paths: Vec<_> = package_root
+                .read_dir()
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            paths.sort_by_key(|dir| dir.path());
+            for path in paths {
+                if let Some(file_name) = path.file_name().to_str() {
+                    if file_name.to_uppercase().starts_with("LICENSE") {
+                        return Some(file_name.to_string());
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Determine whether or not a crate __should__ include a build script
