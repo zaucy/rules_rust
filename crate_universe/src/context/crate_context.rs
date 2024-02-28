@@ -242,61 +242,73 @@ impl Default for BuildScriptAttributes {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CrateContext {
     /// The package name of the current crate
     pub name: String,
 
     /// The full version of the current crate
-    pub version: String,
+    pub version: semver::Version,
 
     /// The package URL of the current crate
+    #[serde(default)]
     pub package_url: Option<String>,
 
     /// Optional source annotations if they were discoverable in the
     /// lockfile. Workspace Members will not have source annotations and
     /// potentially others.
+    #[serde(default)]
     pub repository: Option<SourceAnnotation>,
 
     /// A list of all targets (lib, proc-macro, bin) associated with this package
+    #[serde(default)]
     pub targets: BTreeSet<Rule>,
 
     /// The name of the crate's root library target. This is the target that a dependent
     /// would get if they were to depend on `{crate_name}`.
+    #[serde(default)]
     pub library_target_name: Option<String>,
 
     /// A set of attributes common to most [Rule] types or target types.
+    #[serde(default)]
     pub common_attrs: CommonAttributes,
 
     /// Optional attributes for build scripts. This field is only populated if
     /// a build script (`custom-build`) target is defined for the crate.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub build_script_attrs: Option<BuildScriptAttributes>,
 
     /// The license used by the crate
+    #[serde(default)]
     pub license: Option<String>,
 
     /// The SPDX licence IDs
+    /// #[serde(default)]
     pub license_ids: BTreeSet<String>,
 
-    // The license file
+    /// The license file
+    #[serde(default)]
     pub license_file: Option<String>,
 
     /// Additional text to add to the generated BUILD file.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub additive_build_file_content: Option<String>,
 
     /// If true, disables pipelining for library targets generated for this crate
     #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default)]
     pub disable_pipelining: bool,
 
     /// Extra targets that should be aliased.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub extra_aliased_targets: BTreeMap<String, String>,
 
     /// Transition rule to use instead of `alias`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub alias_rule: Option<AliasRule>,
 }
 
@@ -311,7 +323,7 @@ impl CrateContext {
         include_build_scripts: bool,
     ) -> Self {
         let package: &Package = &packages[&annotation.node.id];
-        let current_crate_id = CrateId::new(package.name.clone(), package.version.to_string());
+        let current_crate_id = CrateId::new(package.name.clone(), package.version.clone());
 
         let new_crate_dep = |dep: Dependency| -> CrateDependency {
             let pkg = &packages[&dep.package_id];
@@ -322,7 +334,7 @@ impl CrateContext {
             let target = sanitize_module_name(&dep.target_name);
 
             CrateDependency {
-                id: CrateId::new(pkg.name.clone(), pkg.version.to_string()),
+                id: CrateId::new(pkg.name.clone(), pkg.version.clone()),
                 target,
                 alias: dep.alias,
             }
@@ -460,7 +472,7 @@ impl CrateContext {
         // Create the crate's context and apply extra settings
         CrateContext {
             name: package.name.clone(),
-            version: package.version.to_string(),
+            version: package.version.clone(),
             license: package.license.clone(),
             license_ids,
             license_file,
@@ -828,7 +840,7 @@ mod test {
 
         let mut pairred_extras = BTreeMap::new();
         pairred_extras.insert(
-            CrateId::new("common".to_owned(), "0.1.0".to_owned()),
+            CrateId::new("common".to_owned(), semver::Version::new(0, 1, 0)),
             PairedExtras {
                 package_id,
                 crate_extra: CrateAnnotations {

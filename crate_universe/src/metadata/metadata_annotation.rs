@@ -306,7 +306,7 @@ impl LockfileAnnotation {
         package: &cargo_lock::Package,
         metadata: &WorkspaceMetadata,
     ) -> Option<SourceInfo> {
-        let crate_id = CrateId::new(package.name.to_string(), package.version.to_string());
+        let crate_id = CrateId::new(package.name.to_string(), package.version.clone());
         metadata.sources.get(&crate_id).cloned()
     }
 
@@ -406,7 +406,7 @@ impl Annotations {
                     None
                 } else {
                     Some((
-                        CrateId::new(pkg.name.clone(), pkg.version.to_string()),
+                        CrateId::new(pkg.name.clone(), pkg.version.clone()),
                         PairedExtras {
                             package_id: pkg_id.clone(),
                             crate_extra,
@@ -448,7 +448,7 @@ fn is_workspace_member(id: &PackageId, cargo_metadata: &CargoMetadata) -> bool {
     if cargo_metadata.workspace_members.contains(id) {
         if let Some(data) = find_workspace_metadata(cargo_metadata) {
             let pkg = &cargo_metadata[id];
-            let crate_id = CrateId::new(pkg.name.clone(), pkg.version.to_string());
+            let crate_id = CrateId::new(pkg.name.clone(), pkg.version.clone());
 
             !data.sources.contains_key(&crate_id)
         } else {
@@ -472,6 +472,7 @@ fn cargo_meta_pkg_to_locked_pkg<'a>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::config::CrateNameAndVersionReq;
 
     use crate::test::*;
 
@@ -575,7 +576,7 @@ mod test {
         // Create a config with some random annotation
         let mut config = Config::default();
         config.annotations.insert(
-            CrateId::new("mock-crate".to_owned(), "0.1.0".to_owned()),
+            CrateNameAndVersionReq::new("mock-crate".to_owned(), "0.1.0".parse().unwrap()),
             CrateAnnotations::default(),
         );
 
@@ -589,7 +590,14 @@ mod test {
 
     #[test]
     fn defaults_from_package_metadata() {
-        let crate_id = CrateId::new("has_package_metadata".to_owned(), "0.0.0".to_owned());
+        let crate_id = CrateId::new(
+            "has_package_metadata".to_owned(),
+            semver::Version::new(0, 0, 0),
+        );
+        let crate_name_and_version_req = CrateNameAndVersionReq::new(
+            "has_package_metadata".to_owned(),
+            "0.0.0".parse().unwrap(),
+        );
         let annotations = CrateAnnotations {
             rustc_env: Some(Select::from_value(BTreeMap::from([(
                 "BAR".to_owned(),
@@ -601,7 +609,7 @@ mod test {
         let mut config = Config::default();
         config
             .annotations
-            .insert(crate_id.clone(), annotations.clone());
+            .insert(crate_name_and_version_req, annotations.clone());
 
         // Combine the above annotations with default values provided by the
         // crate author in package metadata.
