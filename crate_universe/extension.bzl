@@ -5,8 +5,10 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//crate_universe:defs.bzl", _crate_universe_crate = "crate")
 load("//crate_universe/private:crates_vendor.bzl", "CRATES_VENDOR_ATTRS", "generate_config_file", "generate_splicing_manifest")
-load("//crate_universe/private:generate_utils.bzl", "render_config")
+load("//crate_universe/private:generate_utils.bzl", "CARGO_BAZEL_GENERATOR_SHA256", "CARGO_BAZEL_GENERATOR_URL", "GENERATOR_ENV_VARS", "render_config")
+load("//crate_universe/private:urls.bzl", "CARGO_BAZEL_SHA256S", "CARGO_BAZEL_URLS")
 load("//crate_universe/private/module_extensions:cargo_bazel_bootstrap.bzl", "get_cargo_bazel_runner")
+load("//rust/platform:triple.bzl", "get_host_triple")
 
 # A list of labels which may be relative (and if so, is within the repo the rule is generated in).
 #
@@ -220,8 +222,58 @@ def _package_to_json(p):
         if v
     })
 
+def _get_generator(module_ctx):
+    """Query Network Resources to local a `cargo-bazel` binary.  
+
+    Based off get_generator in crates_universe/private/generate_utils.bzl
+
+    Args:
+        module_ctx (module_ctx):  The rules context object
+
+    Returns:
+        tuple(path, dict) The path to a 'cargo-bazel' binary. The pairing (dict)
+            may be `None` if there is not need to update the attribute
+    """
+    host_triple = get_host_triple(module_ctx)
+    use_environ = False
+    for var in GENERATOR_ENV_VARS:
+        if var in module_ctx.os.environ:
+            use_environ = True
+
+    if use_environ:
+        generator_sha256 = module_ctx.os.environ.get(CARGO_BAZEL_GENERATOR_SHA256)
+        generator_url = module_ctx.os.environ.get(CARGO_BAZEL_GENERATOR_URL)
+    elif len(CARGO_BAZEL_URLS) == 0:
+        return module_ctx.path(Label("@cargo_bazel_bootstrap//:cargo-bazel"))
+    else:
+        generator_sha256 = CARGO_BAZEL_SHA256S.get(host_triple)
+        generator_url = CARGO_BAZEL_URLS.get(host_triple)
+
+    if not generator_url:
+        fail((
+            "No generator URL was found either in the `CARGO_BAZEL_GENERATOR_URL` " +
+            "environment variable or for the `{}` triple in the `generator_urls` attribute"
+        ).format(host_triple))
+
+    output = module_ctx.path("cargo-bazel.exe" if "win" in module_ctx.os.name else "cargo-bazel")
+
+    # Download the file into place
+    download_kwargs = {
+        "executable": True,
+        "output": output,
+        "url": generator_url,
+    }
+
+    if generator_sha256:
+        download_kwargs.update({"sha256": generator_sha256})
+
+    module_ctx.download(**download_kwargs)
+    return output
+
 def _crate_impl(module_ctx):
-    cargo_bazel = get_cargo_bazel_runner(module_ctx)
+    cargo_bazel_output = _get_generator(module_ctx)
+    cargo_bazel = get_cargo_bazel_runner(module_ctx, cargo_bazel_output)
+
     all_repos = []
     for mod in module_ctx.modules:
         module_annotations = {}
