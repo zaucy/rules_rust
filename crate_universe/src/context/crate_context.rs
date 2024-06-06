@@ -61,6 +61,28 @@ pub(crate) enum Rule {
     BuildScript(TargetAttributes),
 }
 
+impl Rule {
+    /// The keys that can be used in override_targets to override these Rule sources.
+    /// These intentionally match the accepted `Target.kind`s returned by cargo-metadata.
+    pub(crate) fn override_target_key(&self) -> &'static str {
+        match self {
+            Self::Library(..) => "lib",
+            Self::ProcMacro(..) => "proc-macro",
+            Self::Binary(..) => "bin",
+            Self::BuildScript(..) => "custom-build",
+        }
+    }
+
+    pub(crate) fn crate_name(&self) -> &str {
+        match self {
+            Self::Library(attrs)
+            | Self::ProcMacro(attrs)
+            | Self::Binary(attrs)
+            | Self::BuildScript(attrs) => &attrs.crate_name,
+        }
+    }
+}
+
 /// A set of attributes common to most `rust_library`, `rust_proc_macro`, and other
 /// [core rules of `rules_rust`](https://bazelbuild.github.io/rules_rust/defs.html).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,6 +334,11 @@ pub(crate) struct CrateContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub(crate) alias_rule: Option<AliasRule>,
+
+    /// Targets to use instead of the default target for the crate.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
+    pub(crate) override_targets: BTreeMap<String, Label>,
 }
 
 impl CrateContext {
@@ -497,6 +524,7 @@ impl CrateContext {
             disable_pipelining: false,
             extra_aliased_targets: BTreeMap::new(),
             alias_rule: None,
+            override_targets: BTreeMap::new(),
         }
         .with_overrides(extras)
     }
@@ -667,6 +695,10 @@ impl CrateContext {
                         patches.clone_from(&crate_extra.patches);
                     }
                 }
+            }
+
+            if let Some(override_targets) = &crate_extra.override_targets {
+                self.override_targets.extend(override_targets.clone());
             }
         }
 
