@@ -392,7 +392,7 @@ def get_cc_user_link_flags(ctx):
     """
     return ctx.fragments.cpp.linkopts
 
-def get_linker_and_args(ctx, attr, crate_type, cc_toolchain, feature_configuration, rpaths, add_flags_for_binary = False):
+def get_linker_and_args(ctx, attr, crate_type, cc_toolchain, feature_configuration, rpaths, add_flags_for_binary = False, link_param_file = None):
     """Gathers cc_common linker information
 
     Args:
@@ -444,6 +444,7 @@ def get_linker_and_args(ctx, attr, crate_type, cc_toolchain, feature_configurati
         is_linking_dynamic_library = is_linking_dynamic_library,
         runtime_library_search_directories = rpaths,
         user_link_flags = user_link_flags,
+        param_file = link_param_file,
     )
     link_args = cc_common.get_memory_inefficient_command_line(
         feature_configuration = feature_configuration,
@@ -904,7 +905,7 @@ def construct_arguments(
     # Rustc arguments
     rustc_flags = ctx.actions.args()
     rustc_flags.set_param_file_format("multiline")
-    rustc_flags.use_param_file("@%s", use_always = False)
+    rustc_flags.use_param_file("@%s", use_always = True)
     rustc_flags.add(crate_info.root)
     rustc_flags.add(crate_info.name, format = "--crate-name=%s")
     rustc_flags.add(crate_info.type, format = "--crate-type=%s")
